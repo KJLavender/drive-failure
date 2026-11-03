@@ -12,7 +12,7 @@ D0 = date(2025, 1, 1)
 def _rows(serial, model, days, fail_day=None, skip=()):
     return [
         {"date": D0 + timedelta(d), "serial_number": serial, "model": model,
-         "capacity_bytes": 1, "failure": int(d == fail_day)}
+         "capacity_bytes": 1, "failure": int(d == fail_day), "smart_9_raw": 24.0 * (100 + d)}
         for d in days if d not in skip
     ]
 
@@ -42,6 +42,7 @@ def test_labels_and_quality():
     assert d.loc["dead", "failed"] and d.loc["dead", "days_after_fail"] == 0
     assert d.loc["zombie", "days_after_fail"] == 19
     assert d.loc["gappy", "missing_days"] == 2
+    assert d.loc["dead", "poh_first"] == 2400 and d.loc["dead", "poh_last"] == 24 * 149
     assert d.loc["dup", "n_models"] == 1
     assert d.loc["ssd", "media"] == "SSD" and d.loc["healthy", "media"] == "HDD"
 

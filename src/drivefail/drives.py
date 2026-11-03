@@ -27,6 +27,9 @@ WITH per_drive AS (
         count(*) AS n_days,
         min(date) FILTER (WHERE failure = 1) AS first_fail_date,
         count(*) FILTER (WHERE failure = 1) AS n_fail_events,
+        -- 進出觀測時的通電時數（存活分析的左截斷用）
+        arg_min(smart_9_raw, date) FILTER (WHERE smart_9_raw IS NOT NULL) AS poh_first,
+        arg_max(smart_9_raw, date) FILTER (WHERE smart_9_raw IS NOT NULL) AS poh_last,
     FROM daily
     GROUP BY serial_number
 )
