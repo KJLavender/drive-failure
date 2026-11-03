@@ -88,3 +88,37 @@ def operating_point(df: pd.DataFrame, score: np.ndarray, thr: float, horizon: in
         "mean_lead_days": round(lead, 1),
         "n_failures": n,
     }
+
+
+def bootstrap_ci(df: pd.DataFrame, score: np.ndarray, thr: float, horizon: int,
+                 n_boot: int = 500, seed: int = 0) -> dict:
+    """以「硬碟」為單位重抽樣，給偵測率與誤報率的 95% 信賴區間。
+
+    故障硬碟與健康硬碟分開抽（分層），門檻固定。
+    """
+    alarm = score >= thr
+    # 故障硬碟：是否在 1..N 天內被警告
+    failed_ids = df.loc[df["days_to_fail"] == 0, "serial_number"].unique()
+    in_win = df["days_to_fail"].between(1, horizon).to_numpy() & alarm
+    hit_ids = set(df.loc[in_win, "serial_number"])
+    hits = np.array([s in hit_ids for s in failed_ids], dtype=float)
+    # 健康硬碟：每顆的（被警告月數 × 權重, 月數 × 權重）
+    healthy = ~df["failed"].to_numpy()
+    h = df.loc[healthy, ["serial_number", "date", "weight"]].copy()
+    h["alarm"] = alarm[healthy]
+    h["month"] = pd.to_datetime(h["date"]).dt.to_period("M")
+    dm = h.groupby(["serial_number", "month"]).agg(alarm=("alarm", "max"), weight=("weight", "first"))
+    per_drive = (dm.assign(aw=dm["alarm"] * dm["weight"])
+                 .groupby(level=0).agg(aw=("aw", "sum"), w=("weight", "sum")))
+    aw, w = per_drive["aw"].to_numpy(), per_drive["w"].to_numpy()
+
+    rng = np.random.default_rng(seed)
+    rec, fa = np.empty(n_boot), np.empty(n_boot)
+    for i in range(n_boot):
+        rec[i] = hits[rng.integers(0, len(hits), len(hits))].mean() if len(hits) else np.nan
+        j = rng.integers(0, len(aw), len(aw))
+        fa[i] = aw[j].sum() / w[j].sum() * 1000
+    return {
+        "recall_ci": (round(float(np.nanpercentile(rec, 2.5)), 4), round(float(np.nanpercentile(rec, 97.5)), 4)),
+        "false_alarms_ci": (round(float(np.percentile(fa, 2.5)), 3), round(float(np.percentile(fa, 97.5)), 3)),
+    }

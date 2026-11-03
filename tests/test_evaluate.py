@@ -60,3 +60,17 @@ def test_detection_accepts_nullable_int_from_duckdb():
     df["days_to_fail"] = df["days_to_fail"].astype("float64")  # train.load_split 的轉換
     alarm = np.ones(len(df), bool)
     assert detection(df, alarm, horizon=7)[0] == 1.0
+
+
+def test_bootstrap_ci_brackets_point_estimate():
+    from drivefail.evaluate import bootstrap_ci
+    df = pd.concat([_drive(f"f{i}", 40, fail=True) for i in range(50)]
+                   + [_drive(f"h{i}", 31, weight=10) for i in range(200)], ignore_index=True)
+    score = np.zeros(len(df))
+    score[(df.serial_number.isin([f"f{i}" for i in range(25)]) & (df.days_to_fail == 3)).to_numpy()] = 1
+    score[(df.serial_number == "h0").to_numpy()] = 1
+    ci = bootstrap_ci(df, score, 0.5, horizon=7, n_boot=300)
+    rec, _, _ = detection(df, score >= 0.5, 7)
+    fa = false_alarm_rate(df, score >= 0.5)
+    assert ci["recall_ci"][0] < rec == 0.5 < ci["recall_ci"][1]
+    assert ci["false_alarms_ci"][0] <= fa <= ci["false_alarms_ci"][1]

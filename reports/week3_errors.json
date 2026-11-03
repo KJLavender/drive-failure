@@ -1,0 +1,49 @@
+{
+  "operating_point": {
+    "threshold": -1.1628085461510627,
+    "false_alarms_per_1k_month": 1.405,
+    "recall": 0.503,
+    "mean_lead_days": 18.8,
+    "n_failures": 503
+  },
+  "recall_ci": [
+    0.4622,
+    0.5467
+  ],
+  "false_alarms_ci": [
+    0.85,
+    1.958
+  ],
+  "failures": 495,
+  "silent_share_all_failures": 0.2141,
+  "silent_share_missed": 0.4215,
+  "recall_excluding_silent": 0.6401,
+  "by_vendor": [
+    {
+      "vendor": "Seagate",
+      "failures": 200,
+      "recall": 0.675,
+      "silent_share": 0.22
+    },
+    {
+      "vendor": "Toshiba",
+      "failures": 130,
+      "recall": 0.462,
+      "silent_share": 0.308
+    },
+    {
+      "vendor": "WDC/HGST",
+      "failures": 165,
+      "recall": 0.352,
+      "silent_share": 0.133
+    }
+  ],
+  "false_alarm_drives": 32,
+  "false_alarm_with_bb5_nonzero": 0.9688,
+  "healthy_drives_with_bb5_nonzero": 0.0853,
+  "false_alarm_vendor_mix": {
+    "Toshiba": 0.438,
+    "Seagate": 0.375,
+    "WDC/HGST": 0.188
+  }
+}
