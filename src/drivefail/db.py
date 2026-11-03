@@ -12,7 +12,7 @@ def done_quarters() -> list[str]:
     return sorted(p.parent.name for p in PARQUET_DIR.glob("*/_DONE"))
 
 
-def connect(quarters: list[str] | None = None, memory_limit: str = "12GB") -> duckdb.DuckDBPyConnection:
+def connect(quarters: list[str] | None = None, memory_limit: str = "6GB") -> duckdb.DuckDBPyConnection:
     con = duckdb.connect()
     con.execute(f"SET memory_limit='{memory_limit}'")
     con.execute(f"SET temp_directory='{(TMP_DIR / 'duckdb_spill').as_posix()}'")

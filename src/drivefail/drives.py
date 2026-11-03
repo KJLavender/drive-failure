@@ -29,22 +29,18 @@ WITH per_drive AS (
         count(*) FILTER (WHERE failure = 1) AS n_fail_events,
     FROM daily
     GROUP BY serial_number
-),
-after_fail AS (
-    SELECT d.serial_number, count(*) AS days_after_fail
-    FROM daily d JOIN per_drive p USING (serial_number)
-    WHERE d.date > p.first_fail_date
-    GROUP BY d.serial_number
 )
-SELECT p.*,
-    p.first_fail_date IS NOT NULL AS failed,
-    coalesce(a.days_after_fail, 0) AS days_after_fail,
-    datediff('day', p.first_date, p.last_date) + 1 - p.n_days AS missing_days,
-FROM per_drive p LEFT JOIN after_fail a USING (serial_number)
+SELECT *,
+    first_fail_date IS NOT NULL AS failed,
+    -- 第一次故障之後還出現多久（日曆天）；只掃一次資料，不再 join 回 daily
+    coalesce(datediff('day', first_fail_date, last_date), 0) AS days_after_fail,
+    datediff('day', first_date, last_date) + 1 - n_days AS missing_days,
+FROM per_drive
 """
 
 
 def build_drives(con: duckdb.DuckDBPyConnection) -> None:
+    con.execute("DROP VIEW IF EXISTS drives")  # connect() 可能已掛上舊的 drives.parquet
     con.execute(f"CREATE OR REPLACE TABLE drives AS {DRIVES_SQL}")
 
 
