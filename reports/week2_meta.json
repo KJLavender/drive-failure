@@ -1,0 +1,15 @@
+{
+  "train_rows": 853365,
+  "valid_rows": 647706,
+  "test_rows": 1255069,
+  "valid": [
+    "2025-10-01",
+    "2026-01-01"
+  ],
+  "test_start": "2026-01-01",
+  "budgets_per_1k_drive_month": [
+    1.0,
+    2.0,
+    5.0
+  ]
+}

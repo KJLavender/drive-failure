@@ -52,3 +52,11 @@ def test_threshold_respects_budget():
     score = rng.random(len(df))
     thr = threshold_for_budget(df, score, budget=100)
     assert false_alarm_rate(df, score >= thr) <= 100
+
+
+def test_detection_accepts_nullable_int_from_duckdb():
+    df = pd.concat([_drive("f", 20, fail=True), _drive("h", 20)], ignore_index=True)
+    df["days_to_fail"] = df["days_to_fail"].astype("Int64")   # 和 DuckDB .df() 一樣
+    df["days_to_fail"] = df["days_to_fail"].astype("float64")  # train.load_split 的轉換
+    alarm = np.ones(len(df), bool)
+    assert detection(df, alarm, horizon=7)[0] == 1.0

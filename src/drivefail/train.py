@@ -65,6 +65,10 @@ def load_split(con, start: date | None, end: date | None, holdout: bool, neg_rat
     ).df()
     feat_cols = [c for c in df.columns if c not in ID_COLS]
     df[feat_cols] = df[feat_cols].astype("float32")
+    # DuckDB 給的是可空整數（pd.NA），布林遮罩會炸；統一成 float + NaN
+    dist = ["days_to_fail", "days_to_last", "days_to_end"]
+    df[dist] = df[dist].astype("float64")
+    df["failed"] = df["failed"].astype(bool)
     return df
 
 
@@ -103,21 +107,24 @@ def fit_logreg(tr: pd.DataFrame, y: pd.Series, cols: list[str]) -> Fitted:
     X = scaler.fit_transform(_signed_log(tr[cols].fillna(0).to_numpy()))
     m = LogisticRegression(max_iter=2000, class_weight="balanced", C=0.1)
     m.fit(X, y, sample_weight=tr["weight"])
-    pred = lambda d: m.predict_proba(scaler.transform(_signed_log(d[cols].fillna(0).to_numpy())))[:, 1]
+    pred = lambda d: m.decision_function(scaler.transform(_signed_log(d[cols].fillna(0).to_numpy())))
     return Fitted("logreg", pred, pd.Series(m.coef_[0], index=cols))
 
 
 def fit_lgbm(tr, y, va, yv, cols, name="lgbm") -> Fitted:
-    pos_w = (tr["weight"] * (y == 0)).sum() / (tr["weight"] * (y == 1)).sum()
-    params = dict(objective="binary", learning_rate=0.05, num_leaves=31, min_child_samples=50,
-                  feature_fraction=0.8, bagging_fraction=0.8, bagging_freq=1,
-                  scale_pos_weight=min(pos_w, 50.0), metric="average_precision", verbose=-1, seed=0)
+    # 不用 scale_pos_weight：疊在抽樣權重上會把機率推到 1.0，大量同分導致門檻切不開。
+    # 強正則化：每顆故障硬碟貢獻約 N 筆幾乎相同的正樣本，不壓住就會「背硬碟」
+    # （未正則化時驗證集 AP 在第 1 輪就最高，之後一路下降）。
+    params = dict(objective="binary", learning_rate=0.05, num_leaves=15, min_child_samples=500,
+                  lambda_l2=10.0, feature_fraction=0.8, bagging_fraction=0.8, bagging_freq=1,
+                  metric="average_precision", verbose=-1, seed=0)
     dtr = lgb.Dataset(tr[cols], y, weight=tr["weight"])
     dva = lgb.Dataset(va[cols], yv, weight=va["weight"], reference=dtr)
     m = lgb.train(params, dtr, num_boost_round=1000, valid_sets=[dva],
                   callbacks=[lgb.early_stopping(50, verbose=False)])
     imp = pd.Series(m.feature_importance("gain"), index=cols).sort_values(ascending=False)
-    return Fitted(name, lambda d: m.predict(d[cols], num_iteration=m.best_iteration), imp)
+    # 用 logit 排序，避免機率飽和成同分
+    return Fitted(name, lambda d: m.predict(d[cols], num_iteration=m.best_iteration, raw_score=True), imp)
 
 
 # ---------- 實驗 ----------
