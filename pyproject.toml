@@ -12,6 +12,7 @@ dependencies = [
     "lifelines>=0.30.0",
     "lightgbm>=4.7.0",
     "matplotlib>=3.11.2",
+    "ops-judge",
     "pandas>=3.1.0",
     "pyarrow>=26.0.1",
     "scikit-learn>=1.9.1",
@@ -26,3 +27,6 @@ build-backend = "uv_build"
 dev = [
     "pytest>=9.2.0",
 ]
+
+[tool.uv.sources]
+ops-judge = { git = "https://github.com/KJLavender/ops-judge" }

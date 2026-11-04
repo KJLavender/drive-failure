@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drive failure agent — 高風險硬碟</title>
+<style>
+  .viz-root {
+    --surface-0: #f3f2ee; --surface-1: #fcfcfb; --border: #e6e5df;
+    --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #77766f;
+    --grid: #e6e5df; --crosshair: #9b9a92; --select: #e9f1fb;
+    --s5: #2a78d6; --s187: #eb6834; --s197: #1baf7a; --s198: #eda100; --s188: #e87ba4; --s-other: #8a897f;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    .viz-root {
+      --surface-0: #111110; --surface-1: #1a1a19; --border: #2e2e2c;
+      --text-primary: #ffffff; --text-secondary: #c3c2b7; --text-muted: #9a998f;
+      --grid: #2e2e2c; --crosshair: #77766f; --select: #1f2d40;
+      --s5: #3987e5; --s187: #d95926; --s197: #199e70; --s198: #c98500; --s188: #d55181; --s-other: #8a897f;
+      color-scheme: dark;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px/1.5 system-ui, "Microsoft JhengHei", "Noto Sans TC", sans-serif; }
+  .viz-root { background: var(--surface-0); color: var(--text-primary); min-height: 100vh; padding: 20px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 18px 0 8px; }
+  .sub { color: var(--text-secondary); margin: 0 0 16px; }
+  .tiles { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .tile { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 10px 14px; min-width: 140px; }
+  .tile .v { font-size: 22px; font-weight: 600; }
+  .tile .l { color: var(--text-secondary); font-size: 12px; }
+  .filters { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+  .filters button { background: var(--surface-1); color: var(--text-primary); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 10px; cursor: pointer; font: inherit; }
+  .filters button[aria-pressed="true"] { border-color: var(--text-primary); font-weight: 600; }
+  .layout { display: grid; grid-template-columns: minmax(420px, 1fr) minmax(420px, 1.3fr); gap: 16px; align-items: start; }
+  @media (max-width: 1000px) { .layout { grid-template-columns: 1fr; } }
+  .panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 8px; padding: 12px; min-width: 0; }
+  .scroll { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--text-secondary); font-weight: 500; font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  tbody tr { cursor: pointer; }
+  tbody tr:hover, tbody tr[aria-selected="true"] { background: var(--select); }
+  .badge { display: inline-block; border: 1px solid var(--border); border-radius: 4px; padding: 0 6px; font-size: 12px; }
+  .muted { color: var(--text-muted); }
+  .charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+  .chart { position: relative; }
+  .chart .t { font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+  .chart .sw { width: 10px; height: 2px; border-radius: 1px; display: inline-block; }
+  .chart svg { width: 100%; height: 90px; display: block; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 6px; padding: 4px 8px; font-size: 12px; white-space: nowrap; display: none; z-index: 2; }
+  ul { margin: 4px 0; padding-left: 20px; }
+  .tier { display: grid; grid-template-columns: 90px 1fr; gap: 8px; align-items: center; margin: 4px 0; }
+  .bars { display: flex; gap: 8px; flex-wrap: wrap; font-size: 12px; }
+  .bar { display: inline-flex; align-items: center; gap: 4px; }
+  .bar i { display: inline-block; height: 8px; background: var(--text-secondary); border-radius: 0 4px 4px 0; }
+  .ok::before { content: "✓ "; } .bad::before { content: "✗ "; }
+  details summary { cursor: pointer; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<div class="viz-root">
+  <h1>硬碟故障預測 agent：高風險硬碟</h1>
+  <p class="sub">Backblaze 2026 年測試期的保留組硬碟。決策：校準過的 LightGBM + 成本模型 → 灰色地帶交給 LLM → 仍不確定就排入人工佇列。
+    「事後」欄是答案（快照後 30 天內是否故障），agent 做決定時看不到。</p>
+  <div class="tiles" id="tiles"></div>
+  <div class="layout">
+    <div class="panel">
+      <div class="filters" id="filters" role="group" aria-label="篩選"></div>
+      <div class="scroll"><table>
+        <thead><tr><th>硬碟</th><th>快照日</th><th class="num">30 天故障機率</th><th>決定</th><th>決定者</th><th>事後</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+    </div>
+    <div class="panel" id="detail"><p class="muted">點選左邊的硬碟查看細節。</p></div>
+  </div>
+</div>
+<script>
+const DATA = /*__DATA__*/null;
+const LABEL = { replace: "換碟", watch: "觀察", ignore: "忽略", needs_human: "待人工" };
+const BY = { jev: "風險模型", llm: "LLM", human_queue: "人工佇列" };
+const ZONE = { all: "全部", replace: "換碟區", watch: "觀察區", gray: "灰色地帶" };
+const COLOR = a => ["5", "187", "197", "198", "188"].includes(a) ? `var(--s${a})` : "var(--s-other)";
+const pct = p => (p * 100).toFixed(p < 0.01 ? 2 : 1) + "%";
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+let zone = "all", selected = null;
+
+function tiles() {
+  const c = DATA.cases, n = k => c.filter(k).length;
+  const items = [
+    [c.length, "案例（每區抽樣）"],
+    [n(x => x.decided_by === "jev"), "風險模型直接決定"],
+    [n(x => x.decided_by === "llm"), "LLM 決定"],
+    [n(x => x.status === "queued"), "排入人工佇列"],
+    [n(x => x.failed), "事後 30 天內故障（抽樣案例，故障硬碟比例被放大）"],
+  ];
+  document.getElementById("tiles").innerHTML = items.map(([v, l]) => `<div class="tile"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+}
+
+function filters() {
+  const el = document.getElementById("filters");
+  el.innerHTML = Object.entries(ZONE).map(([k, v]) => `<button data-z="${k}" aria-pressed="${k === zone}">${v}</button>`).join("");
+  el.onclick = e => { const z = e.target.dataset.z; if (z) { zone = z; filters(); rows(); } };
+}
+
+function rows() {
+  const list = DATA.cases.filter(c => zone === "all" || c.zone === zone).sort((a, b) => b.p30 - a.p30);
+  const tb = document.getElementById("rows");
+  tb.innerHTML = list.map(c => `<tr data-c="${c.case}" aria-selected="${c.case === selected}">
+    <td>${esc(c.serial)}<div class="muted">${esc(c.model)}</div></td><td>${c.date}</td>
+    <td class="num">${pct(c.p30)}</td><td><span class="badge">${LABEL[c.decision]}</span></td>
+    <td>${BY[c.decided_by] || c.decided_by}</td><td>${c.failed ? "● 故障" : "○ 未故障"}</td></tr>`).join("");
+  tb.onclick = e => { const tr = e.target.closest("tr"); if (tr) select(+tr.dataset.c); };
+}
+
+function miniChart(attr, dates, ys) {
+  const W = 260, H = 90, P = { l: 34, r: 6, t: 6, b: 16 };
+  const vals = ys.filter(v => v !== null), max = Math.max(1, ...vals), n = dates.length;
+  const x = i => P.l + (W - P.l - P.r) * (n > 1 ? i / (n - 1) : 0.5);
+  const y = v => H - P.b - (H - P.t - P.b) * (v / max);
+  let d = "", pen = false;
+  ys.forEach((v, i) => { if (v === null) { pen = false; return; } d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; });
+  const id = "c" + attr;
+  return `<div class="chart" id="${id}">
+    <div class="t"><span class="sw" style="background:${COLOR(attr)}"></span>SMART ${attr} ${esc(DATA.names[attr] || "")}</div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="SMART ${attr} 趨勢">
+      <line x1="${P.l}" x2="${W - P.r}" y1="${y(0)}" y2="${y(0)}" stroke="var(--grid)"/>
+      <line x1="${P.l}" x2="${W - P.r}" y1="${y(max)}" y2="${y(max)}" stroke="var(--grid)"/>
+      <text x="${P.l - 4}" y="${y(max) + 4}" text-anchor="end" font-size="10" fill="var(--text-muted)">${max.toLocaleString()}</text>
+      <text x="${P.l - 4}" y="${y(0) + 3}" text-anchor="end" font-size="10" fill="var(--text-muted)">0</text>
+      <text x="${P.l}" y="${H - 3}" font-size="10" fill="var(--text-muted)">${dates[0] || ""}</text>
+      <text x="${W - P.r}" y="${H - 3}" text-anchor="end" font-size="10" fill="var(--text-muted)">${dates[n - 1] || ""}</text>
+      <path d="${d}" fill="none" stroke="${COLOR(attr)}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"/>
+      <line class="xh" y1="${P.t}" y2="${H - P.b}" stroke="var(--crosshair)" stroke-dasharray="3 3" visibility="hidden" vector-effect="non-scaling-stroke"/>
+      <circle class="dot" r="4" fill="${COLOR(attr)}" stroke="var(--surface-1)" stroke-width="2" visibility="hidden"/>
+      <rect x="${P.l}" y="0" width="${W - P.l - P.r}" height="${H}" fill="transparent" class="hit"/>
+    </svg><div class="tip"></div></div>`;
+}
+
+function wireChart(attr, dates, ys) {
+  const root = document.getElementById("c" + attr), svg = root.querySelector("svg"), tip = root.querySelector(".tip");
+  const xh = svg.querySelector(".xh"), dot = svg.querySelector(".dot"), hit = svg.querySelector(".hit");
+  const W = 260, H = 90, P = { l: 34, r: 6, t: 6, b: 16 }, n = dates.length;
+  const max = Math.max(1, ...ys.filter(v => v !== null));
+  const show = ev => {
+    const r = svg.getBoundingClientRect(), fx = (ev.clientX - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(n - 1, Math.round((fx - P.l) / (W - P.l - P.r) * (n - 1))));
+    const xi = P.l + (W - P.l - P.r) * (n > 1 ? i / (n - 1) : 0.5), v = ys[i];
+    xh.setAttribute("x1", xi); xh.setAttribute("x2", xi); xh.setAttribute("visibility", "visible");
+    if (v !== null) { dot.setAttribute("cx", xi); dot.setAttribute("cy", H - P.b - (H - P.t - P.b) * (v / max)); dot.setAttribute("visibility", "visible"); }
+    else dot.setAttribute("visibility", "hidden");
+    tip.innerHTML = `${dates[i]}<br><b>${v === null ? "缺值" : v.toLocaleString()}</b>`;
+    tip.style.display = "block";
+    const left = xi / W * r.width;
+    tip.style.left = Math.min(left + 8, r.width - tip.offsetWidth) + "px"; tip.style.top = "18px";
+  };
+  hit.addEventListener("pointermove", show);
+  hit.addEventListener("pointerleave", () => { tip.style.display = "none"; xh.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+}
+
+function detail() {
+  const c = DATA.cases.find(x => x.case === selected), el = document.getElementById("detail");
+  const h = c.history, attrs = Object.keys(h.series);
+  const tiers = c.tiers.map(t => {
+    const probs = t.probs ? Object.entries(t.probs).sort((a, b) => b[1] - a[1]).map(([k, v]) =>
+      `<span class="bar"><i style="width:${Math.max(2, v * 60)}px"></i>${LABEL[k]} ${(v * 100).toFixed(0)}%</span>`).join("") : `<span class="muted">${t.error ? "錯誤：" + esc(t.error) : "排入佇列"}</span>`;
+    const status = t.accepted === true ? "（採用）" : t.accepted === false ? "（信心不足，往下送）" : "";
+    return `<div class="tier"><div>${BY[t.judge] || ({ jev: "風險模型", human: "人工" })[t.judge] || t.judge}</div><div class="bars">${probs} <span class="muted">${status}</span></div></div>`;
+  }).join("");
+  const r = c.report;
+  const report = r ? `<h2>Agent 報告 <span class="muted">（${r.latency_s}s，$${r.cost_usd.toFixed(3)}，忠實度 ${(r.faithfulness.faithfulness_precision * 100).toFixed(0)}%）</span></h2>
+    <p><b>${esc(r.headline)}</b></p>
+    <ul>${r.findings.map((f, i) => `<li class="${r.checked[i] ? "ok" : "bad"}">${esc(f.claim)} <span class="muted">[${esc(f.evidence_key)}]</span></li>`).join("")}</ul>
+    <p>${esc(r.risk_explanation)}</p>
+    ${r.next_steps.length ? `<b>下一步</b><ul>${r.next_steps.map(s => `<li>${esc(s)}</li>`).join("")}</ul>` : ""}
+    ${r.faithfulness.unsupported_numbers.length ? `<p class="muted">找不到出處的數字：${r.faithfulness.unsupported_numbers.join("、")}</p>` : ""}`
+    : `<p class="muted">這個案例沒有產生報告（只抽 30 份）。</p>`;
+  el.innerHTML = `<h2 style="margin-top:0">${esc(c.serial)} <span class="muted">${esc(c.model)} · ${c.date}</span></h2>
+    <p>30 天故障機率 <b>${pct(c.p30)}</b> · 決定 <span class="badge">${LABEL[c.decision]}</span> · 事後 ${c.failed ? "● 30 天內故障" : "○ 未故障"}</p>
+    <h2>SMART 錯誤計數器（快照前 ${h.dates.length} 天）</h2>
+    ${attrs.length ? `<div class="charts">${attrs.map(a => miniChart(a, h.dates, h.series[a])).join("")}</div>` : `<p class="muted">期間內所有錯誤計數器皆為 0。</p>`}
+    ${h.missing_days ? `<p class="muted">其中 ${h.missing_days} 天讀不到 SMART。</p>` : ""}
+    <h2>趨勢摘要（給 LLM 的輸入）</h2><ul>${c.trend.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+    <h2>決策路徑</h2>${tiers}
+    <details><summary>影響最大的特徵（SHAP，logit）</summary><ul>${c.factors.map(f => `<li>${esc(f.name)}：${f.contribution > 0 ? "+" : ""}${f.contribution}</li>`).join("")}</ul></details>
+    ${report}`;
+  attrs.forEach(a => wireChart(a, h.dates, h.series[a]));
+}
+
+function select(id) {
+  if (!DATA.cases.some(c => c.case === id)) return;
+  selected = id; history.replaceState(null, "", "#case=" + id); rows(); detail();
+}
+
+tiles(); filters(); rows();
+const m = location.hash.match(/case=(\d+)/);
+if (m) select(+m[1]);
+</script>
+</body>
+</html>

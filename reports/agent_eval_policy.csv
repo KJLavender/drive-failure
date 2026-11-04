@@ -1,0 +1,6 @@
+policy,cost_per_1k_drives,replacements_per_1k,watched_per_1k,failures_replaced_in_advance,replace_precision
+always_ignore,5.38,0.0,0.0,0/291,
+backblaze_rule (BB5 任一 > 0 → 換),80.45,78.86,0.0,205/291,0.079
+model + cost (換／觀察／忽略),4.18,0.23,7.7,40/291,0.656
+"model, replace only (p ≥ 換碟分界)",4.87,0.23,0.0,40/291,0.656
+oracle (壞的才換),1.08,1.08,0.0,291/291,1.0
