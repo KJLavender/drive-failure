@@ -1,7 +1,7 @@
 [project]
 name = "drivefail"
 version = "0.1.0"
-description = "Add your description here"
+description = "Hard drive failure prediction on Backblaze SMART data, with a judge-core agent that decides and reports"
 readme = "README.md"
 authors = [
     { name = "KJLavender", email = "KJLavender@users.noreply.github.com" }
