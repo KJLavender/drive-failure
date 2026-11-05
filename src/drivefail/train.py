@@ -1,6 +1,6 @@
 """Week 2 實驗：規則式 baseline、邏輯斯迴歸、LightGBM、去掉 Backblaze 5 指標的消融。
 
-切分（plan 6.2）：
+切分（不能隨機切，否則會用未來預測過去）：
 - 時間：train < VALID_START ≤ valid < TEST_START ≤ test
 - 硬碟：hash 出 20% 保留組，只出現在 valid／test
 - 每段資料只用該段結束前已知的資訊定標籤（未來才故障 → 不確定）

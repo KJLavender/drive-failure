@@ -1,4 +1,4 @@
-"""產生靜態 dashboard（site/index.html）：高風險硬碟清單 → 點進去看 SMART 趨勢、cascade 路徑、agent 報告。
+"""產生靜態 dashboard（docs/index.html，GitHub Pages 從 docs/ 發布）：高風險硬碟清單 → 點進去看 SMART 趨勢、cascade 路徑、agent 報告。
 
 單一 HTML 檔，資料內嵌，不需要伺服器，可直接放 GitHub Pages。
 """
@@ -15,7 +15,7 @@ from drivefail.paths import DERIVED_DIR, REPORTS_DIR, ROOT
 from drivefail.week3 import ERROR_COUNTERS
 
 HISTORY_DAYS = 120
-SITE = ROOT / "site"
+SITE = ROOT / "docs"
 
 
 def _tiers_by_case(n: int) -> list[list[dict]]:
@@ -77,7 +77,7 @@ def build() -> None:
     SITE.mkdir(exist_ok=True)
     html = (ROOT / "src" / "drivefail" / "dashboard_template.html").read_text(encoding="utf-8")
     (SITE / "index.html").write_text(html.replace("/*__DATA__*/null", data), encoding="utf-8")
-    print(f"site/index.html：{len(cases)} 個案例")
+    print(f"docs/index.html：{len(cases)} 個案例")
 
 
 if __name__ == "__main__":

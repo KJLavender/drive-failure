@@ -4,3 +4,10 @@ data/
 .venv/
 __pycache__/
 .pytest_cache/
+# 計畫檔只留在本機
+PLAN.md
+PLANS.md
+plan.md
+*-plan.md
+*_plan.md
+plans/
